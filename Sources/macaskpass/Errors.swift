@@ -44,7 +44,6 @@ enum MacAskpassError: Error, CustomStringConvertible {
               原因：非图形会话里指纹框只会弹到机器前那块屏幕上，而且随后读取钥匙串必定以 \
             -25308（User interaction is not allowed）失败，等下去也拿不到密码。
               远程需要 root 时请直接用普通 sudo 手工输入密码。
-              确有把握要放行，可设置 MACASKPASS_ALLOW_REMOTE=1。
             """
         }
     }

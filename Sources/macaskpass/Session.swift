@@ -18,16 +18,13 @@ struct SessionContext {
     let sshConnection: String?
     let sshClient: String?
 
-    /// 允许用户显式放行（例如某些带图形访问的远程桌面场景）。
-    static var allowRemoteOverride: Bool {
-        let v = ProcessInfo.processInfo.environment["MACASKPASS_ALLOW_REMOTE"] ?? "0"
-        return v == "1" || v.lowercased() == "true" || v.lowercased() == "yes"
-    }
-
     /// 需要拦截的条件：拿不到图形访问，或者明摆着是 SSH 进来的。
+    ///
+    /// 这里刻意不提供任何环境变量放行开关 —— 那种开关攻击者自己就能设，
+    /// 等于把闸门的钥匙留在门口，而它换来的“便利”在非图形会话里并不存在
+    /// （钥匙串照样以 -25308 失败）。
     var shouldBlock: Bool {
-        if SessionContext.allowRemoteOverride { return false }
-        return !hasGraphicAccess || sshConnection != nil || sshClient != nil
+        !hasGraphicAccess || sshConnection != nil || sshClient != nil
     }
 
     /// 给人看的来源描述，例如 “SSH 来自 192.168.1.7”。

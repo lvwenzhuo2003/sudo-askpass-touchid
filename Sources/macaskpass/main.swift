@@ -1,7 +1,7 @@
 import Foundation
 import LocalAuthentication
 
-let macaskpassVersion = "1.1.0"
+let macaskpassVersion = "1.2.0"
 let installedPath = "/usr/local/bin/macaskpass"
 
 let account = NSUserName()
@@ -28,12 +28,12 @@ func usageText() -> String {
       SUDO_ASKPASS=\(installedPath)   sudo -A 用到的路径
       MACASKPASS_STRICT=1            只认指纹，不回退到「输入登录密码 / Apple Watch」
       MACASKPASS_TIMEOUT=120         等待验证的秒数上限（默认 120）
-      MACASKPASS_ALLOW_REMOTE=1      放行远程 / 非图形会话（默认直接拦截，见下）
 
     远程会话拦截：
       从 SSH 等非图形会话调用时，macaskpass 不会去等指纹 —— 那种场景下指纹框
       只会弹到机器前那块屏幕上，而且随后读取钥匙串必定以 -25308 失败。
       此时它会立刻拒绝，并往机器前的屏幕推送一条通知说明有人尝试过。
+      这道闸门没有放行开关，攻击者无法用环境变量绕过。
     """
 }
 
@@ -142,8 +142,6 @@ func cmdStatus() {
     lines.append("当前会话        : \(session.originDescription)（\(session.attributeSummary)）")
     if session.shouldBlock {
         lines.append("会话闸门        : 会被拦截 —— 这种会话下的指纹请求直接拒绝，不等指纹")
-    } else if SessionContext.allowRemoteOverride {
-        lines.append("会话闸门        : 已被 MACASKPASS_ALLOW_REMOTE=1 放行")
     } else {
         lines.append("会话闸门        : 通过")
     }

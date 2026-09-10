@@ -67,7 +67,9 @@ SSH 登录    ：attrs=0x5020  hasGraphicAccess=false  isRemote=true   → 拦�
 - 就算指纹过了，紧接着的钥匙串读取也**必定**以 `-25308`(`errSecInteractionNotAllowed`) 失败，
   因为非图形安全会话拿不到那条钥匙串条目。等下去纯属白等。
 
-想放行（例如某些带图形访问的远程桌面场景），设置 `MACASKPASS_ALLOW_REMOTE=1`。
+**这道闸门刻意不提供任何放行开关。** 环境变量式的开关攻击者自己就能设，
+等于把闸门的钥匙留在门口；而它能换来的“便利”在非图形会话里根本不存在 ——
+放行了钥匙串照样以 `-25308` 失败。远程需要 root 就用普通 `sudo` 手工输入密码。
 
 ## 安装
 
@@ -118,7 +120,6 @@ macaskpass --help | --version
 | `SUDO_ASKPASS` | 指向 `/usr/local/bin/macaskpass`，`sudo -A` 用 |
 | `MACASKPASS_STRICT=1` | 只认指纹。默认情况下指纹不可用时会回退到系统验证对话框（可输入登录密码或用 Apple Watch） |
 | `MACASKPASS_TIMEOUT=120` | 等待验证的秒数上限，超时就失败，避免 sudo 一直挂着 |
-| `MACASKPASS_ALLOW_REMOTE=1` | 放行远程 / 非图形会话（默认拦截） |
 
 ## 常见问题
 
