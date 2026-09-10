@@ -1,7 +1,7 @@
 import Foundation
 import LocalAuthentication
 
-let macaskpassVersion = "1.0.0"
+let macaskpassVersion = "1.1.0"
 let installedPath = "/usr/local/bin/macaskpass"
 
 let account = NSUserName()
@@ -28,6 +28,12 @@ func usageText() -> String {
       SUDO_ASKPASS=\(installedPath)   sudo -A 用到的路径
       MACASKPASS_STRICT=1            只认指纹，不回退到「输入登录密码 / Apple Watch」
       MACASKPASS_TIMEOUT=120         等待验证的秒数上限（默认 120）
+      MACASKPASS_ALLOW_REMOTE=1      放行远程 / 非图形会话（默认直接拦截，见下）
+
+    远程会话拦截：
+      从 SSH 等非图形会话调用时，macaskpass 不会去等指纹 —— 那种场景下指纹框
+      只会弹到机器前那块屏幕上，而且随后读取钥匙串必定以 -25308 失败。
+      此时它会立刻拒绝，并往机器前的屏幕推送一条通知说明有人尝试过。
     """
 }
 
@@ -39,9 +45,29 @@ func setupSnippet() -> String {
     """
 }
 
+// MARK: - 会话闸门
+
+/// 远程 / 非图形会话直接拦截：不等指纹，并提醒机器前的人。
+func enforceLocalSession(action: String) throws {
+    let session = SessionContext.current()
+    guard session.shouldBlock else { return }
+
+    ConsoleAlert.notify(
+        title: "macaskpass 拦截了一次指纹请求",
+        subtitle: session.originDescription,
+        message: "\(action)：远程会话用不了 Touch ID，已直接拒绝，没有等待指纹。"
+    )
+
+    throw MacAskpassError.remoteSessionBlocked(
+        origin: session.originDescription,
+        detail: session.attributeSummary
+    )
+}
+
 // MARK: - 子命令
 
 func cmdAskpass(prompt: String?) throws {
+    try enforceLocalSession(action: "sudo 请求密码")
     guard keychain.exists() else { throw MacAskpassError.noStoredPassword }
 
     var reason = "验证指纹后，把 \(account) 的密码交给 sudo"
@@ -61,6 +87,8 @@ func cmdAskpass(prompt: String?) throws {
 }
 
 func cmdSetPassword(verify: Bool) throws {
+    try enforceLocalSession(action: "保存密码")
+
     let hint = "请输入 \(account) 的登录密码（sudo 用的那个）"
     var password: String?
 
@@ -104,12 +132,21 @@ func cmdDelete() throws {
 func cmdStatus() {
     let bio = Biometrics.availability()
     let stored = keychain.exists()
+    let session = SessionContext.current()
 
     var lines: [String] = []
     lines.append("macaskpass \(macaskpassVersion)")
     lines.append("当前用户        : \(account)")
     lines.append("可执行文件      : \(CommandLine.arguments.first ?? "?")")
     lines.append("已安装到        : \(FileManager.default.isExecutableFile(atPath: installedPath) ? installedPath : "（还没装到 \(installedPath)）")")
+    lines.append("当前会话        : \(session.originDescription)（\(session.attributeSummary)）")
+    if session.shouldBlock {
+        lines.append("会话闸门        : 会被拦截 —— 这种会话下的指纹请求直接拒绝，不等指纹")
+    } else if SessionContext.allowRemoteOverride {
+        lines.append("会话闸门        : 已被 MACASKPASS_ALLOW_REMOTE=1 放行")
+    } else {
+        lines.append("会话闸门        : 通过")
+    }
     lines.append("生物识别        : \(bio.available ? "可用（\(bio.name)）" : "不可用 —— \(bio.reason)")")
     lines.append("严格指纹模式    : \(Biometrics.strict ? "开（MACASKPASS_STRICT=1）" : "关（指纹不可用时可回退到登录密码 / Apple Watch）")")
     lines.append("钥匙串中的密码  : \(stored ? "已保存" : "未保存 —— 请运行 macaskpass --set-password")")
@@ -124,6 +161,7 @@ func cmdStatus() {
 }
 
 func cmdTest() throws {
+    try enforceLocalSession(action: "自检")
     guard keychain.exists() else { throw MacAskpassError.noStoredPassword }
     try Biometrics.authenticate(reason: "验证指纹以测试 macaskpass 能否取出密码")
 
@@ -166,6 +204,10 @@ do {
         // sudo 会把提示语作为第一个参数传进来；没有参数时也走这条路。
         try cmdAskpass(prompt: args.first)
     }
+} catch let error as MacAskpassError {
+    Prompt.err("macaskpass: \(error)")
+    if case .remoteSessionBlocked = error { exit(3) }
+    exit(1)
 } catch {
     Prompt.err("macaskpass: \(error)")
     exit(1)

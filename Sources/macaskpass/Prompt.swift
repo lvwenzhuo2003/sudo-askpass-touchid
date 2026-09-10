@@ -50,7 +50,7 @@ enum Prompt {
             .trimmingCharacters(in: CharacterSet(charactersIn: "\r"))
     }
 
-    private static func appleScriptString(_ s: String) -> String {
+    static func appleScriptString(_ s: String) -> String {
         "\"" + s.replacingOccurrences(of: "\\", with: "\\\\")
                 .replacingOccurrences(of: "\"", with: "\\\"") + "\""
     }

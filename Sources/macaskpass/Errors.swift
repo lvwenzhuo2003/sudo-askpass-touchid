@@ -12,6 +12,7 @@ enum MacAskpassError: Error, CustomStringConvertible {
     case emptyPassword
     case invalidPassword(String)
     case usage(String)
+    case remoteSessionBlocked(origin: String, detail: String)
 
     var description: String {
         switch self {
@@ -36,6 +37,15 @@ enum MacAskpassError: Error, CustomStringConvertible {
             return "密码不可用：\(why)"
         case .usage(let msg):
             return msg
+        case .remoteSessionBlocked(let origin, let detail):
+            return """
+            已拦截来自「\(origin)」的指纹请求，未等待 Touch ID。
+              会话属性：\(detail)
+              原因：非图形会话里指纹框只会弹到机器前那块屏幕上，而且随后读取钥匙串必定以 \
+            -25308（User interaction is not allowed）失败，等下去也拿不到密码。
+              远程需要 root 时请直接用普通 sudo 手工输入密码。
+              确有把握要放行，可设置 MACASKPASS_ALLOW_REMOTE=1。
+            """
         }
     }
 }
