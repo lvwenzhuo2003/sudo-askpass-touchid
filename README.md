@@ -41,9 +41,12 @@ $ sudo -A softwareupdate -l
 - 这毕竟是把登录密码**明文存在钥匙串里**（钥匙串本身是加密的，且随登录钥匙串锁定而锁定）。
   安全性 ≈ 「你的钥匙串 + 你的手指」，比一次次手打密码方便，但不等于零风险。
 - 想要更强的保证（密钥进 Secure Enclave、没有指纹连密文都取不出来），需要用
-  data protection keychain + 生物识别访问控制，而那要求程序带
-  `keychain-access-groups` entitlement 并用付费开发者证书签名 —— ad-hoc 签名会被系统直接拒绝
-  （`SecItemAdd` 返回 `-34018`，强行加 entitlement 的 ad-hoc 二进制会被 kill -9）。
+  data protection keychain + 生物识别访问控制。这条路目前走不通，两种签名都试过：
+  - ad-hoc 签名：`SecItemAdd` 返回 `-34018`（缺 entitlement）；强行加 entitlement 的
+    ad-hoc 二进制会被系统 `kill -9`。
+  - 免费的 Apple Development 证书签名：amfid 报 `-413 No matching profile found`。
+    `keychain-access-groups` 是受限 entitlement，必须有描述文件背书，而免费账号的
+    描述文件 7 天就过期，纯 Mach-O 可执行文件也无法内嵌描述文件（只有 .app bundle 能）。
 - 如果你觉得「存密码」这件事本身不可接受，看下面的 [不存密码的替代方案](#不存密码的替代方案)。
 
 ## 远程会话拦截
@@ -75,9 +78,25 @@ SSH 登录    ：attrs=0x5020  hasGraphicAccess=false  isRemote=true   → 拦�
 
 ```sh
 cd ~/macaskpass
-make                 # 编译（Swift 6，无第三方依赖）
+make                 # 编译并签名（Swift 6，无第三方依赖）
 sudo make install    # 装到 /usr/local/bin/macaskpass
 ```
+
+### 关于代码签名
+
+`make` 会自动挑一张可用的 `Apple Development` / `Developer ID Application` 证书来签名
+（`make identity` 可以看会用哪一张，也可以用 `make CODESIGN_ID="..."` 手工指定）。
+
+这一步不是可有可无的。钥匙串条目的 ACL 绑定的是创建者的 **Designated Requirement**：
+
+```
+ad-hoc 签名 →  cdhash H"43e7693..."                     一重新编译就变
+证书签名   →  identifier "macaskpass" and anchor apple  重编、重装都不变
+              generic and certificate leaf[subject.CN] = "Apple Development: ..."
+```
+
+所以 ad-hoc 构建每次重新编译后都得重跑一次 `--set-password`，而证书签名之后存一次就一劳永逸。
+没有证书也能用，只是要忍受这个麻烦 —— 免费的 Apple 开发者账号就能申请到 Apple Development 证书。
 
 然后保存密码（**不要加 sudo**，否则条目会存到 root 的钥匙串里）：
 
@@ -124,8 +143,11 @@ macaskpass --help | --version
 ## 常见问题
 
 **重新编译或重装之后，sudo 时弹出「钥匙串访问」要我输入登录密码？**
-新编出来的二进制 cdhash 变了，不再匹配旧条目的 ACL。在弹框里点「始终允许」即可，
-或者干脆重跑一次 `macaskpass --set-password`（会删掉旧条目、按新二进制重建 ACL）。
+说明二进制是 ad-hoc 签名的 —— 那种签名的 Designated Requirement 就是 cdhash 本身，
+一重新编译就变，旧条目的 ACL 自然对不上。装一张开发者证书后 `make` 会自动用它签名，
+DR 变成「签名主体 + 标识符」，重编、重装都不再影响 ACL（已实测：cdhash 变了、DR 不变、
+另一个版本能直接读到条目且零弹窗）。
+眼下先修复：弹框里点「始终允许」，或者重跑一次 `macaskpass --set-password`。
 
 **改了 Mac 登录密码之后 sudo 失败？**
 重跑 `macaskpass --set-password`。平时可以用 `macaskpass --test` 检查存的密码是否还有效。

@@ -1,7 +1,7 @@
 import Foundation
 import LocalAuthentication
 
-let macaskpassVersion = "1.2.0"
+let macaskpassVersion = "1.3.0"
 let installedPath = "/usr/local/bin/macaskpass"
 
 let account = NSUserName()
